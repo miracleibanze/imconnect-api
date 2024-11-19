@@ -15,9 +15,15 @@ const { getAllMessages } = require("./controllers/messageControllers");
 const { initialize } = require("./socket");
 
 mongoose
-  .connect("mongodb://localhost:27017/imconnect")
-  .then(() => console.log("Connected to mongodb successfully"))
-  .catch((err) => console.log(`Error : ${err}`));
+  .connect(process.env.MONGO_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
+  .then(() => console.log("MongoDB connected"))
+  .catch((err) => {
+    console.error("MongoDB connection error:", err);
+    process.exit(1);
+  });
 
 app.use(express.json({ limit: "100mb" }));
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
