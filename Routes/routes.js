@@ -1,9 +1,9 @@
 const routes = require("express").Router();
 
-routes.use("/api", require("./users"));
-routes.use("/api", require("./posts"));
-routes.use("/api", require("./auth"));
-routes.use("/api", require("./searchQueries"));
-routes.use("/api", require("./messages"));
+routes.use("/", require("./users"));
+routes.use("/", require("./posts"));
+routes.use("/", require("./auth"));
+routes.use("/", require("./searchQueries"));
+routes.use("/", require("./messages"));
 
 module.exports = routes;

@@ -5,23 +5,20 @@ const mongoose = require("mongoose");
 const { getIO } = require("../socket");
 
 const createNewMessage = asyncHandler(async (req, res) => {
-  const { senderId, receiverId, message } = req.body;
+  const { senderId, receiverId, message, image } = req.body;
 
   const newMessage = new Message({
     senderId,
     receiverId,
     message,
+    image,
   });
 
   try {
     await newMessage.save();
 
     const io = getIO();
-    io.to(receiverId).emit("newMessage", {
-      senderId,
-      receiverId,
-      message: newMessage,
-    });
+    io.to(receiverId).emit("newMessage", newMessage);
 
     res.status(200).json({ success: true, message: newMessage });
   } catch (error) {
@@ -48,7 +45,6 @@ const getAllMessages = asyncHandler(async (req, res) => {
       .select("image names username email")
       .lean()
       .exec();
-
     return res.status(200).send({ messages, user });
   } catch (error) {
     console.log(error);
@@ -155,7 +151,6 @@ const myChatParticipants = asyncHandler(async (req, res) => {
     res.status(500).json({ error: "Failed to fetch chat participants" });
   }
 });
-
 const handleDeleteMessage = asyncHandler(async (req, res) => {
   const { messageId } = req.params;
   console.log("Message ID to delete:", messageId);
@@ -173,9 +168,10 @@ const handleDeleteMessage = asyncHandler(async (req, res) => {
     console.log("Deleted message:", message);
 
     const messages = await Message.find().lean().exec();
-
     const io = getIO();
-    io.emit("messages", messages);
+
+    // Broadcast to all except the user who deleted
+    io.emit("messageDeleted", { messageId });
 
     res.status(200).json({ message: "Message deleted successfully" });
   } catch (error) {

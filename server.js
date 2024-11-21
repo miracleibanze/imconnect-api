@@ -20,8 +20,8 @@ mongoose
     process.exit(1);
   });
 
-app.use(express.json({ limit: "100mb" }));
-app.use(express.urlencoded({ limit: "100mb", extended: true }));
+app.use(express.json({ limit: "300mb" }));
+app.use(express.urlencoded({ limit: "300mb", extended: true }));
 app.use(cors(corsOptions));
 
 app.get("/", async (req, res) => {
@@ -40,6 +40,9 @@ initialize(server);
 server.keepAliveTimeout = 120000;
 server.headersTimeout = 120000;
 
-server.listen(PORT, () => {
+server.listen(5000, () => {
+  console.log(`socket running on port 5000`);
+});
+app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });

@@ -13,6 +13,10 @@ const messageSchema = new mongoose.Schema(
       ref: "User",
     },
     message: { type: String, required: true },
+    image: {
+      type: Boolean,
+      default: false,
+    },
     timestamp: { type: Date, default: Date.now },
     readBy: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
   },

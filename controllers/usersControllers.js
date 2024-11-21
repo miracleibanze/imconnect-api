@@ -84,8 +84,7 @@ const createNewUser = asyncHandler(async (req, res) => {
   const user = await User.create(userObject);
 
   if (user) {
-    req.session.user = user;
-    return res.status(201).json(req.session.user);
+    return res.status(201).json(user);
   } else {
     return res.status(400).json({ message: "Invalid user data received" });
   }
