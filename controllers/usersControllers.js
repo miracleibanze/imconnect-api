@@ -19,8 +19,8 @@ const getAllUsers = asyncHandler(async (req, res) => {
     .sort({ createdAt: -1 })
     .lean();
 
-  if (!users || !users.length) {
-    return res.status(400).json({ message: "No users found" });
+  if (users || !users.length) {
+    return res.json({ message: "No users found" });
   }
 
   const friends = [];
