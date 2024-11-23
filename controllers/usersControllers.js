@@ -19,7 +19,7 @@ const getAllUsers = asyncHandler(async (req, res) => {
     .sort({ createdAt: -1 })
     .lean();
 
-  if (users || !users.length) {
+  if (!users || !users.length) {
     return res.json({ message: "No users found" });
   }
 
@@ -277,6 +277,74 @@ const getMyFiends = asyncHandler(async (req, res) => {
   }
 });
 
+const sendRequest = asyncHandler(async (req, res) => {
+  const { recipientId } = req.params;
+  const { senderId } = req.body; // Assuming sender's ID is in the request body
+
+  try {
+    const recipient = await User.findById(recipientId);
+    const sender = await User.findById(senderId);
+
+    if (!recipient || !sender) {
+      return res.json({ message: "User not found" });
+    }
+
+    // Check if already friends or request already sent
+    if (
+      recipient.friends.includes(senderId) ||
+      recipient.friendRequests.includes(senderId)
+    ) {
+      return res
+        .status(400)
+        .json({ message: "Friend request already sent or already friends" });
+    }
+
+    recipient.friendRequests.push(senderId);
+    await recipient.save();
+
+    res.status(200).json({ message: "Friend request sent successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error });
+  }
+});
+
+const requestRespond = asyncHandler(async (req, res) => {
+  const { senderId } = req.params;
+  const { recipientId, action } = req.body; // Assuming action is "accept" or "decline"
+
+  try {
+    const recipient = await User.findById(recipientId);
+    const sender = await User.findById(senderId);
+
+    if (!recipient || !sender) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Check if sender is in recipient's friend requests
+    const requestIndex = recipient.friendRequests.indexOf(senderId);
+    if (requestIndex === -1) {
+      return res.status(400).json({ message: "No friend request found" });
+    }
+
+    if (action === "accept") {
+      // Add each other to friends list
+      recipient.friends.push(senderId);
+      sender.friends.push(recipientId);
+    }
+
+    // Remove sender from friend requests
+    recipient.friendRequests.splice(requestIndex, 1);
+    await recipient.save();
+    await sender.save();
+
+    res
+      .status(200)
+      .json({ message: `Friend request ${action}ed successfully` });
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error });
+  }
+});
+
 module.exports = {
   getAllUsers,
   createNewUser,
@@ -284,4 +352,6 @@ module.exports = {
   deleteUser,
   getOneUser,
   getMyFiends,
+  requestRespond,
+  sendRequest,
 };

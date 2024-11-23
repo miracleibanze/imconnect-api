@@ -14,13 +14,11 @@ authRouter.post(
 
     const findUser = await User.findOne({ email }).lean().exec();
     if (!findUser) {
-      return res
-        .status(404)
-        .send({ message: "user with that email not found" });
+      return res.status(404).send({ message: "user" });
     }
     const isMatch = await bcrypt.compare(password, findUser.password);
     if (!isMatch) {
-      return res.status(401).send({ message: "incorrect password" });
+      return res.status(401).send({ message: "password" });
     }
     console.log(`successfully logged in as ${findUser.names}`);
     return res.status(200).send(findUser);
