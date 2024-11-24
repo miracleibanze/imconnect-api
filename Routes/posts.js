@@ -1,22 +1,17 @@
-const expressAsyncHandler = require("express-async-handler");
+const express = require("express");
+const router = express.Router();
 const {
   getAllPosts,
   createNewPost,
   updatePost,
   deletePost,
-  searchPosts,
   handleLike,
 } = require("../controllers/postsControllers");
-const Post = require("../models/Post");
-const User = require("../models/User");
 
-const posts = require("express").Router();
+router.get("/", getAllPosts);
+router.post("/", createNewPost);
+router.put("/", updatePost);
+router.delete("/", deletePost);
+router.post("/like/:postId", handleLike);
 
-posts
-  .route("/posts")
-  .get(getAllPosts)
-  .post(createNewPost)
-  .patch(updatePost)
-  .delete(deletePost);
-posts.post("/posts/like/:postId", handleLike);
-module.exports = posts;
+module.exports = router;

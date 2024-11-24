@@ -1,6 +1,7 @@
 const asyncHandler = require("express-async-handler");
 const Post = require("../models/Post");
 const User = require("../models/User");
+
 const getAllPosts = asyncHandler(async (req, res) => {
   try {
     const posts = await Post.find()
@@ -11,126 +12,104 @@ const getAllPosts = asyncHandler(async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
-    const transformedPosts = posts.map((post) => ({
-      ...post,
-      person: post.user?.names || "Unknown User",
-      username: post.user?.username || "username",
-      avatar: post.user?.image || null,
-      user: undefined,
-    }));
+    const transformedPosts = posts.map((post) => {
+      const { user, ...rest } = post;
+      return {
+        ...rest,
+        person: user?.names || "Unknown User",
+        username: user?.username || "Unknown",
+        avatar: user?.image || null,
+      };
+    });
 
     res.status(200).json({ success: true, posts: transformedPosts });
   } catch (error) {
     console.error("Error retrieving posts:", error);
-
-    res.status(500).json({ success: false, error: "Error retrieving posts" });
+    res.status(500).json({ success: false, error: "Error retrieving posts." });
   }
 });
 
 const createNewPost = asyncHandler(async (req, res) => {
   const { user, description } = req.body;
 
-  if (!user) {
-    return res.status(400).json({
-      message: "User required",
-    });
+  if (!user || !description) {
+    return res
+      .status(400)
+      .json({ message: "User and description are required." });
   }
-  if (!description) {
-    return res.status(400).json({
-      message: "Please write something !",
-    });
+
+  const userExists = await User.findById(user).lean();
+  if (!userExists) {
+    return res.status(404).json({ message: "User not found." });
   }
-  const person = User.find({ _id: user }).lean().exec();
 
-  if (!person) return res.status(400).send({ message: "no user found" });
+  const post = await Post.create({ user, description });
 
-  console.log(req.body);
-  const postObject = req.body;
-
-  const post = await Post.create(postObject);
-
-  if (post) {
-    return res.status(201).send({ message: "new post created" });
-  } else {
-    return res.status(400).send({ message: "Invalid post data received" });
-  }
+  res.status(201).json({ message: "Post created successfully.", post });
 });
 
 const updatePost = asyncHandler(async (req, res) => {
-  const { id, user, description, feeling, time, images } = req.body;
+  const { id, ...updates } = req.body;
 
-  if (!id || !user || !description || !feeling || !images) {
-    return res.status(400).json({ message: "All fields required" });
+  if (!id) {
+    return res.status(400).json({ message: "Post ID is required." });
   }
 
-  const post = await Post.findById(id).exec();
+  const post = await Post.findById(id);
+  if (!post) {
+    return res.status(404).json({ message: "Post not found." });
+  }
 
-  if (!post) return res.status(400).json({ message: "Post not found" });
-
-  post.user = user;
-  post.feeling = feeling;
-  post.description = description;
-  post.feeling = feeling;
-  post.time = time;
-  post.images = images;
-
+  Object.assign(post, updates);
   const updatedPost = await post.save();
 
-  res.json({ message: `your post was updated` });
+  res
+    .status(200)
+    .json({ message: "Post updated successfully.", post: updatedPost });
 });
 
 const deletePost = asyncHandler(async (req, res) => {
   const { id } = req.body;
 
   if (!id) {
-    return res.status(400).json({ message: "Post ID required" });
+    return res.status(400).json({ message: "Post ID is required." });
   }
 
-  const myPost = await Post.findOne({ post: id }).lean().exec();
-
-  if (post?.lenght) {
-    return res.status(400).json({ message: "post have assigned posts" });
-  }
-
-  const post = await Post.findById(id).exec();
-
+  const post = await Post.findById(id);
   if (!post) {
-    return res.status(400).json({ message: "Post not found" });
+    return res.status(404).json({ message: "Post not found." });
   }
 
-  const result = await post.deleteOne();
-  console.log(result);
-
-  if (!result)
-    return res.status(404).send({ message: "unable to delete post" });
-  const reply = `Postname ${post.postname} with ID ${post._id} deleted`;
-
-  res.json(reply);
+  await post.deleteOne();
+  res.status(200).json({ message: "Post deleted successfully." });
 });
 
 const handleLike = asyncHandler(async (req, res) => {
   const { userId } = req.body;
   const { postId } = req.params;
 
-  try {
-    const post = await Post.findById(postId);
-
-    if (post.likedBy.includes(userId)) {
-      return res.send({ message: "You have already liked this post" });
-    }
-
-    post.likes += 1;
-    post.likedBy.push(userId);
-
-    await post.save();
-
-    res
-      .status(200)
-      .json({ message: "Post liked successfully", likes: post.likes });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error" });
+  if (!userId || !postId) {
+    return res
+      .status(400)
+      .json({ message: "User ID and Post ID are required." });
   }
+
+  const post = await Post.findById(postId);
+  if (!post) {
+    return res.status(404).json({ message: "Post not found." });
+  }
+
+  if (post.likedBy.includes(userId)) {
+    return res.status(400).json({ message: "Post already liked." });
+  }
+
+  post.likes += 1;
+  post.likedBy.push(userId);
+  await post.save();
+
+  res
+    .status(200)
+    .json({ message: "Post liked successfully.", likes: post.likes });
 });
 
 module.exports = {
