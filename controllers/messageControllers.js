@@ -170,7 +170,6 @@ const handleDeleteMessage = asyncHandler(async (req, res) => {
     const messages = await Message.find().lean().exec();
     const io = getIO();
 
-    // Broadcast to all except the user who deleted
     io.emit("messageDeleted", { messageId });
 
     res.status(200).json({ message: "Message deleted successfully" });

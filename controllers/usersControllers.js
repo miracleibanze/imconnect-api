@@ -5,40 +5,42 @@ const Post = require("../models/Post");
 const Message = require("../models/Message");
 const { default: mongoose } = require("mongoose");
 
-// const getAllUsers = asyncHandler(async (req, res) => {
-//   const excludedUsername = req.params.username;
+const getAllUsers = asyncHandler(async (req, res) => {
+  const excludedUsername = req.params.username;
+  console.log(excludedUsername);
+  const currentUser = await User.findOne({
+    username: excludedUsername,
+  }).lean();
 
-//   const currentUser = await User.findOne({ username: excludedUsername }).lean();
+  if (!currentUser) {
+    return res.status(404).json({ message: "Current user not found" });
+  }
 
-//   if (!currentUser) {
-//     return res.status(404).json({ message: "Current user not found" });
-//   }
+  const users = await User.find({ username: { $ne: excludedUsername } })
+    .select("image names username friends")
+    .sort({ createdAt: -1 })
+    .lean();
 
-//   const users = await User.find({ username: { $ne: excludedUsername } })
-//     .select("image names username friends")
-//     .sort({ createdAt: -1 })
-//     .lean();
+  if (!users || !users.length) {
+    return res.json({ message: "No users found" });
+  }
 
-//   if (!users || !users.length) {
-//     return res.json({ message: "No users found" });
-//   }
+  const friends = [];
+  const nonFriends = [];
 
-//   const friends = [];
-//   const nonFriends = [];
+  users.forEach((user) => {
+    if (currentUser.friends.some((friendId) => friendId.equals(user._id))) {
+      friends.push(user);
+    } else {
+      nonFriends.push(user);
+    }
+  });
 
-//   users.forEach((user) => {
-//     if (currentUser.friends.includes(user._id.toString())) {
-//       friends.push(user);
-//     } else {
-//       nonFriends.push(user);
-//     }
-//   });
-
-//   res.json({
-//     friends,
-//     nonFriends,
-//   });
-// });
+  res.json({
+    friends,
+    nonFriends,
+  });
+});
 
 const getOneUser = asyncHandler(async (req, res) => {
   const username = req.params.username;
@@ -62,91 +64,123 @@ const getOneUser = asyncHandler(async (req, res) => {
 
   res.json({ user, posts });
 });
-
-const getAllUsers = asyncHandler(async (req, res) => {
-  const { currentUser } = req.query;
-
-  if (!currentUser) {
-    return res.status(400).json({ message: "Current user is required." });
-  }
-
-  const user = await User.findById(currentUser).lean();
-  if (!user) {
-    return res.status(404).json({ message: "Current user not found." });
-  }
-
-  const users = await User.find({ _id: { $ne: currentUser } })
-    .select("username names image")
-    .lean();
-
-  if (!users.length) {
-    return res.status(404).json({ message: "No users found." });
-  }
-
-  const formattedUsers = users.map((otherUser) => ({
-    ...otherUser,
-    isFriend: user.friends.includes(otherUser._id.toString()),
-  }));
-
-  res.status(200).json({ users: formattedUsers });
-});
-
 const createNewUser = asyncHandler(async (req, res) => {
-  const { username, names, email, password, dob, gender } = req.body;
+  const { names, username, password, email, dob, gender } = req.body;
 
-  if (!username || !names || !email || !password || !dob || !gender) {
-    return res.status(400).json({ message: "All fields are required." });
+  // Check if all fields are provided
+  if (!names || !username || !password || !email || !dob || !gender) {
+    return res.status(400).json({
+      message: "All fields required !",
+    });
   }
 
-  const duplicate = await User.findOne({ email }).lean();
+  // Check if username already exists
+  const duplicate = await User.findOne({ username }).lean().exec();
+
   if (duplicate) {
-    return res.status(409).json({ message: "Email is already registered." });
+    return res.status(409).json({ message: "Duplicate username" });
   }
 
-  const hashedPassword = await bcrypt.hash(password, 10);
+  const userObject = req.body;
 
-  const newUser = new User({
-    username,
+  // Hash the password before saving it
+  userObject.password = await bcrypt.hash(password, 10);
+
+  try {
+    // Create the new user
+    const user = await User.create(userObject);
+
+    // Check if user is created successfully
+    if (user) {
+      return res.status(201).json(user);
+    } else {
+      return res.status(400).json({ message: "Invalid user data received" });
+    }
+  } catch (error) {
+    // Handle any other errors
+    return res.status(500).json({ message: "Server error", error });
+  }
+});
+const updateUser = asyncHandler(async (req, res) => {
+  const {
+    id,
     names,
+    username,
+    image,
+    cover,
+    password,
     email,
-    password: hashedPassword,
+    location,
     dob,
     gender,
-  });
+  } = req.body;
 
-  const savedUser = await newUser.save();
-  res
-    .status(201)
-    .json({ message: "User created successfully.", user: savedUser });
-});
+  if (!id) return res.status(400).json({ message: "id is required" });
 
-const updateUser = asyncHandler(async (req, res) => {
-  const { id, ...updates } = req.body;
+  const user = await User.findById(id).exec();
 
-  if (!id) {
-    return res.status(400).json({ message: "User ID is required." });
+  if (!user) return res.status(404).json({ message: "User not found" });
+
+  // Avoid saving after every change, modify the fields first
+  let updated = false;
+
+  if (names) {
+    user.names = names;
+    updated = true;
   }
 
-  const user = await User.findById(id);
-  if (!user) {
-    return res.status(404).json({ message: "User not found." });
-  }
-
-  if (updates.email) {
-    const duplicate = await User.findOne({ email: updates.email }).lean();
-    if (duplicate && duplicate._id.toString() !== id) {
-      return res.status(409).json({ message: "Email is already in use." });
+  if (username) {
+    const duplicate = await User.findOne({ username }).lean().exec();
+    if (duplicate && duplicate?._id.toString() !== id) {
+      return res.status(409).json({ message: "Username already taken" });
     }
+    user.username = username;
+    updated = true;
   }
 
-  Object.assign(user, updates);
-  const updatedUser = await user.save();
+  if (email) {
+    user.email = email;
+    updated = true;
+  }
 
-  res
-    .status(200)
-    .json({ message: "User updated successfully.", user: updatedUser });
+  if (location) {
+    user.location = location;
+    updated = true;
+  }
+
+  if (dob) {
+    user.dob = dob;
+    updated = true;
+  }
+
+  if (gender) {
+    user.gender = gender;
+    updated = true;
+  }
+
+  if (image) {
+    user.image = image;
+    updated = true;
+  }
+
+  if (cover) {
+    user.cover = cover;
+    updated = true;
+  }
+
+  if (password) {
+    user.password = await bcrypt.hash(password, 10);
+    updated = true;
+  }
+
+  // Save all the changes at once
+  if (updated) {
+    await user.save();
+    return res.status(200).json({ message: "User updated successfully", user });
+  }
+
+  return res.status(400).json({ message: "No fields to update" });
 });
-
 const deleteUser = asyncHandler(async (req, res) => {
   const { id } = req.body;
 
@@ -154,20 +188,40 @@ const deleteUser = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: "User ID is required." });
   }
 
-  const user = await User.findById(id).lean();
+  // Check if posts exist for this user and delete them
+  const posts = await Post.find({ user: id }).lean().exec();
+  if (posts.length > 0) {
+    await Post.deleteMany({ user: id }).exec();
+  }
+
+  // Check if messages exist and delete them
+  const messages = await Message.find({
+    $or: [{ senderId: id }, { receiverId: id }],
+  })
+    .lean()
+    .exec();
+
+  if (messages.length > 0) {
+    await Message.deleteMany({
+      $or: [{ senderId: id }, { receiverId: id }],
+    }).exec();
+  }
+
+  // Find and delete the user
+  const user = await User.findById(id).exec();
   if (!user) {
     return res.status(404).json({ message: "User not found." });
   }
 
-  const posts = await Post.find({ user: id }).lean();
-  if (posts.length > 0) {
-    return res
-      .status(400)
-      .json({ message: "User cannot be deleted with existing posts." });
-  }
+  // Delete the user account
+  const result = await user.deleteOne();
 
-  await User.findByIdAndDelete(id);
-  res.status(200).json({ message: "User deleted successfully." });
+  // Response after deletion
+  const reply = {
+    message: "Account and associated data (posts and messages) deleted.",
+  };
+
+  res.json(reply);
 });
 
 const getMyFiends = asyncHandler(async (req, res) => {

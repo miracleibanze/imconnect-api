@@ -11,14 +11,13 @@ const {
 
 const users = require("express").Router();
 
-users.get("/", getAllUsers);
-users.post("/", createNewUser);
-users.put("/", updateUser);
-users.delete("/", deleteUser);
+users.post("/users", createNewUser);
+users.put("/users", updateUser);
+users.delete("/users", deleteUser);
 
-users.route("/users/:username").get(getAllUsers);
-users.route("/users/one/:username").get(getOneUser);
-users.route("/users/friends/:userId").get(getMyFiends);
+users.get("/users/:username", getAllUsers);
+users.get("/users/one/:username", getOneUser);
+users.get("/users/friends/:userId", getMyFiends);
 
 users.post("/users/send-friend-request/:recipientId", sendRequest);
 
