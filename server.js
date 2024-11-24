@@ -10,7 +10,7 @@ const { corsOptions } = require("./config/cors");
 const { initialize } = require("./socket");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 4000;
 
 mongoose
   .connect(process.env.MONGODB_URL)
