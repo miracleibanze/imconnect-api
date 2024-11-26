@@ -1,6 +1,7 @@
 const asyncHandler = require("express-async-handler");
 const Post = require("../models/Post");
 const User = require("../models/User");
+const { default: mongoose } = require("mongoose");
 
 const getAllPosts = asyncHandler(async (req, res) => {
   try {
@@ -26,6 +27,52 @@ const getAllPosts = asyncHandler(async (req, res) => {
   } catch (error) {
     console.error("Error retrieving posts:", error);
     res.status(500).json({ success: false, error: "Error retrieving posts." });
+  }
+});
+const getPostsByUserId = asyncHandler(async (req, res) => {
+  try {
+    const userId = req.params.id;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid user ID." });
+    }
+
+    const posts = await Post.find({ user: userId })
+      .populate({
+        path: "user",
+        select: "username names image",
+      })
+      .sort({ createdAt: -1 }) // Sort by latest posts first
+      .lean();
+
+    if (!posts || posts.length === 0) {
+      return res
+        .status(404)
+        .json({ success: false, message: "No posts found!" });
+    }
+
+    // Transform the posts data to match the desired structure
+    const transformedPosts = posts.map((post) => {
+      const { user, ...rest } = post;
+      return {
+        ...rest,
+        person: user?.names || "Unknown User",
+        username: user?.username || "Unknown",
+        avatar: user?.image || null,
+      };
+    });
+
+    res.status(200).json({ success: true, posts: transformedPosts });
+  } catch (error) {
+    console.error("Error fetching posts:", error);
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "An error occurred while fetching posts.",
+      });
   }
 });
 
@@ -118,4 +165,5 @@ module.exports = {
   updatePost,
   deletePost,
   handleLike,
+  getPostsByUserId,
 };

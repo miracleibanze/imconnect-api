@@ -6,12 +6,14 @@ const {
   updatePost,
   deletePost,
   handleLike,
+  getPostsByUserId,
 } = require("../controllers/postsControllers");
 
-router.get("/", getAllPosts);
-router.post("/", createNewPost);
-router.put("/", updatePost);
-router.delete("/", deletePost);
-router.post("/like/:postId", handleLike);
+router.get("/posts", getAllPosts);
+router.post("/posts", createNewPost);
+router.put("/posts", updatePost);
+router.delete("/posts", deletePost);
+router.post("/posts/like/:postId", handleLike);
+router.get("/posts/likes/:id", getPostsByUserId);
 
 module.exports = router;

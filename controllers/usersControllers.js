@@ -7,7 +7,6 @@ const { default: mongoose } = require("mongoose");
 
 const getAllUsers = asyncHandler(async (req, res) => {
   const excludedUsername = req.params.username;
-  console.log(excludedUsername);
   const currentUser = await User.findOne({
     username: excludedUsername,
   }).lean();
@@ -44,7 +43,6 @@ const getAllUsers = asyncHandler(async (req, res) => {
 
 const getOneUser = asyncHandler(async (req, res) => {
   const username = req.params.username;
-  console.log(username);
   const user = await User.findOne({ username }).select("-password").lean();
 
   if (!user) {
@@ -67,14 +65,12 @@ const getOneUser = asyncHandler(async (req, res) => {
 const createNewUser = asyncHandler(async (req, res) => {
   const { names, username, password, email, dob, gender } = req.body;
 
-  // Check if all fields are provided
-  if (!names || !username || !password || !email || !dob || !gender) {
+  if (!names || !username || !password || !email || !gender) {
     return res.status(400).json({
       message: "All fields required !",
     });
   }
 
-  // Check if username already exists
   const duplicate = await User.findOne({ username }).lean().exec();
 
   if (duplicate) {
@@ -83,21 +79,17 @@ const createNewUser = asyncHandler(async (req, res) => {
 
   const userObject = req.body;
 
-  // Hash the password before saving it
   userObject.password = await bcrypt.hash(password, 10);
 
   try {
-    // Create the new user
     const user = await User.create(userObject);
 
-    // Check if user is created successfully
     if (user) {
       return res.status(201).json(user);
     } else {
       return res.status(400).json({ message: "Invalid user data received" });
     }
   } catch (error) {
-    // Handle any other errors
     return res.status(500).json({ message: "Server error", error });
   }
 });
@@ -121,7 +113,6 @@ const updateUser = asyncHandler(async (req, res) => {
 
   if (!user) return res.status(404).json({ message: "User not found" });
 
-  // Avoid saving after every change, modify the fields first
   let updated = false;
 
   if (names) {
@@ -173,7 +164,6 @@ const updateUser = asyncHandler(async (req, res) => {
     updated = true;
   }
 
-  // Save all the changes at once
   if (updated) {
     await user.save();
     return res.status(200).json({ message: "User updated successfully", user });
@@ -188,13 +178,11 @@ const deleteUser = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: "User ID is required." });
   }
 
-  // Check if posts exist for this user and delete them
   const posts = await Post.find({ user: id }).lean().exec();
   if (posts.length > 0) {
     await Post.deleteMany({ user: id }).exec();
   }
 
-  // Check if messages exist and delete them
   const messages = await Message.find({
     $or: [{ senderId: id }, { receiverId: id }],
   })
@@ -207,16 +195,13 @@ const deleteUser = asyncHandler(async (req, res) => {
     }).exec();
   }
 
-  // Find and delete the user
   const user = await User.findById(id).exec();
   if (!user) {
     return res.status(404).json({ message: "User not found." });
   }
 
-  // Delete the user account
   const result = await user.deleteOne();
 
-  // Response after deletion
   const reply = {
     message: "Account and associated data (posts and messages) deleted.",
   };
@@ -300,41 +285,71 @@ const getMyFiends = asyncHandler(async (req, res) => {
     res.status(500).json({ error: "Failed to fetch chat participants" });
   }
 });
-
 const sendRequest = asyncHandler(async (req, res) => {
-  const { recipientId } = req.params;
-  const { senderId } = req.body; // Assuming sender's ID is in the request body
-
+  const { recipientId } = req.params; // recipient ID from URL
+  const { senderId } = req.body; // sender ID from the request body
+  console.log({ receiver: recipientId });
+  console.log({ sender: senderId });
   try {
-    const recipient = await User.findById(recipientId);
-    const sender = await User.findById(senderId);
+    // Fetch both recipient and sender in parallel
+    const [recipient, sender] = await Promise.all([
+      User.findById(recipientId), // Find recipient by recipientId
+      User.findById(senderId), // Find sender by senderId
+    ]);
 
+    // Check if both users exist
     if (!recipient || !sender) {
-      return res.json({ message: "User not found" });
+      return res.status(400).json({ message: "User not found" });
     }
 
-    // Check if already friends or request already sent
+    // Check if sender is already a friend or if a request has already been sent
     if (
       recipient.friends.includes(senderId) ||
       recipient.friendRequests.includes(senderId)
     ) {
-      return res
-        .status(400)
-        .json({ message: "Friend request already sent or already friends" });
+      return res.json({
+        message: "Friend request already sent or already friends",
+      });
     }
 
+    // Add sender's ID to the recipient's friendRequests array
     recipient.friendRequests.push(senderId);
+
+    console.log(recipient.friendRequests);
+    // Save the recipient with the updated friendRequests
     await recipient.save();
 
+    // Respond to the client with a success message
     res.status(200).json({ message: "Friend request sent successfully" });
   } catch (error) {
+    console.error("Error sending friend request:", error);
     res.status(500).json({ message: "Server error", error });
+  }
+});
+
+const currentRequests = asyncHandler(async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    const user = await User.findById(userId).populate(
+      "friendRequests",
+      "names username _id"
+    );
+
+    if (!user) {
+      return res.status(400).send({ message: "User not found" });
+    }
+    console.log(user);
+    return res.send(user.friendRequests);
+  } catch (error) {
+    console.error("Error fetching friend requests:", error);
+    return res.status(400).send({ message: "Error fetching requests" });
   }
 });
 
 const requestRespond = asyncHandler(async (req, res) => {
   const { senderId } = req.params;
-  const { recipientId, action } = req.body; // Assuming action is "accept" or "decline"
+  const { recipientId, action } = req.body;
 
   try {
     const recipient = await User.findById(recipientId);
@@ -344,19 +359,16 @@ const requestRespond = asyncHandler(async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Check if sender is in recipient's friend requests
     const requestIndex = recipient.friendRequests.indexOf(senderId);
     if (requestIndex === -1) {
       return res.status(400).json({ message: "No friend request found" });
     }
 
     if (action === "accept") {
-      // Add each other to friends list
       recipient.friends.push(senderId);
       sender.friends.push(recipientId);
     }
 
-    // Remove sender from friend requests
     recipient.friendRequests.splice(requestIndex, 1);
     await recipient.save();
     await sender.save();
@@ -378,4 +390,5 @@ module.exports = {
   getMyFiends,
   requestRespond,
   sendRequest,
+  currentRequests,
 };

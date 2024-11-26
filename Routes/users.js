@@ -7,6 +7,7 @@ const {
   getMyFiends,
   requestRespond,
   sendRequest,
+  currentRequests,
 } = require("../controllers/usersControllers");
 
 const users = require("express").Router();
@@ -22,5 +23,6 @@ users.get("/users/friends/:userId", getMyFiends);
 users.post("/users/send-friend-request/:recipientId", sendRequest);
 
 users.post("/users/respond-friend-request/:senderId", requestRespond);
+users.get("/users/confirm-request/:userId", currentRequests);
 
 module.exports = users;

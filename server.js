@@ -34,12 +34,10 @@ app.use(cors(corsOptions));
 
 app.use("/", require("./routes/routes"));
 app.get("/", (req, res) => {
-  res
-    .status(200)
-    .send({
-      Message:
-        "This is IMConnect Api that is build to facilitate IMConnect web site that was build by IBANZE Miracle. a passionate and talented Web developer. you can access that web site he built on : https://imconnect.netlify.app/ , Enjoy the creativity of this boy and feel free to connect him and give him opportunities to develop his talent.",
-    });
+  return res.status(200).send({
+    Message:
+      "This is IMConnect Api that is build to facilitate IMConnect web site that was build by IBANZE Miracle. a passionate and talented Web developer. you can access that web site he built on : https://imconnect.netlify.app/ , Enjoy the creativity of this boy and feel free to connect him and give him opportunities to develop his talent.",
+  });
 });
 
 // Initialize socket.io event handling
