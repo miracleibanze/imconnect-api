@@ -5,63 +5,77 @@ const Post = require("../models/Post");
 const Message = require("../models/Message");
 const { default: mongoose } = require("mongoose");
 
-const getAllUsers = asyncHandler(async (req, res) => {
-  const excludedUsername = req.params.username;
-  const currentUser = await User.findOne({
-    username: excludedUsername,
-  }).lean();
+const getAllUsers = async (req, res) => {
+  try {
+    const excludedUsername = req.params.username;
+    const currentUser = await User.findOne({
+      username: excludedUsername,
+    }).lean();
 
-  if (!currentUser) {
-    return res.status(404).json({ message: "Current user not found" });
-  }
-
-  const users = await User.find({ username: { $ne: excludedUsername } })
-    .select("image names username friends")
-    .sort({ createdAt: -1 })
-    .lean();
-
-  if (!users || !users.length) {
-    return res.json({ message: "No users found" });
-  }
-
-  const friends = [];
-  const nonFriends = [];
-
-  users.forEach((user) => {
-    if (currentUser.friends.some((friendId) => friendId.equals(user._id))) {
-      friends.push(user);
-    } else {
-      nonFriends.push(user);
+    if (!currentUser) {
+      return res.status(404).json({ message: "Current user not found" });
     }
-  });
 
-  res.json({
-    friends,
-    nonFriends,
-  });
-});
+    const users = await User.find({ username: { $ne: excludedUsername } })
+      .select("image names username friends")
+      .sort({ createdAt: -1 })
+      .lean();
 
-const getOneUser = asyncHandler(async (req, res) => {
-  const username = req.params.username;
-  const user = await User.findOne({ username }).select("-password").lean();
+    if (!users || !users.length) {
+      return res.json({ message: "No users found" });
+    }
 
-  if (!user) {
-    return res.status(404).json({ message: "User not found" });
+    const friends = [];
+    const nonFriends = [];
+    users.forEach((user) => {
+      const isFriend = currentUser.friends.some((friendId) =>
+        mongoose.Types.ObjectId(friendId).equals(user._id)
+      );
+
+      if (isFriend) {
+        friends.push(user);
+      } else {
+        nonFriends.push(user);
+      }
+    });
+
+    res.json({
+      friends,
+      nonFriends,
+    });
+  } catch (error) {
+    console.error("Error fetching all users:", error);
+    res.status(500).json({ message: "Internal Server Error" });
   }
+};
 
-  const initialPosts = await Post.find({ user: user._id })
-    .sort({ createdAt: -1 })
-    .lean();
+const getOneUser = async (req, res) => {
+  try {
+    const username = req.params.username;
+    const user = await User.findOne({ username }).select("-password").lean();
 
-  const posts = initialPosts.map((post) => ({
-    ...post,
-    person: user.names || "Unknown User",
-    avatar: user.image || null,
-    user: undefined,
-  }));
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
 
-  res.json({ user, posts });
-});
+    const initialPosts = await Post.find({ user: user._id })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const posts = initialPosts.map((post) => ({
+      ...post,
+      person: user.names || "Unknown User",
+      avatar: user.image || null,
+      user: undefined,
+    }));
+
+    res.json({ user, posts });
+  } catch (error) {
+    console.error("Error fetching user data:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
 const createNewUser = asyncHandler(async (req, res) => {
   const { names, username, password, email, dob, gender } = req.body;
 
