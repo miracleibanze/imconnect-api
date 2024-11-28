@@ -52,13 +52,19 @@ const getAllMessages = asyncHandler(async (req, res) => {
   }
 });
 const markAsRead = asyncHandler(async (req, res) => {
-  const { chatId, userId } = req.body;
+  const { senderId, receiverId } = req.body;
 
   try {
     const result = await Message.updateMany(
-      { chatId: chatId },
-      { $addToSet: { readBy: userId } }
+      {
+        $or: [
+          { senderId, receiverId },
+          { senderId: receiverId, receiverId: senderId },
+        ],
+      },
+      { $addToSet: { readBy: senderId } } // Mark all messages as read by the user
     );
+
     res.status(200).json({
       message: "Messages marked as read",
       modifiedCount: result.modifiedCount,
@@ -82,7 +88,7 @@ const myChatParticipants = asyncHandler(async (req, res) => {
     const chatParticipants = await Message.aggregate([
       {
         $match: {
-          $or: [{ senderId: currentUser._id }, { receiverId: currentUser._id }],
+          $or: [{ senderId: currentUserId }, { receiverId: currentUserId }],
         },
       },
       {
@@ -102,8 +108,47 @@ const myChatParticipants = asyncHandler(async (req, res) => {
       {
         $group: {
           _id: "$userId",
-          lastMessageTime: { $max: "$timestamp" },
-          lastMessage: { $first: "$message" },
+          earliestMessageTime: { $min: "$timestamp" }, // Get the earliest message time
+          earliestMessage: { $last: "$message" }, // Get the earliest message content
+          unread: {
+            $push: {
+              $cond: [
+                {
+                  $and: [
+                    { $ne: ["$senderId", currentUserId] }, // Message sent by the other user
+                    {
+                      $not: {
+                        $in: [currentUserId, { $ifNull: ["$readBy", []] }],
+                      },
+                    }, // Not read by the current user
+                  ],
+                },
+                true,
+                false,
+              ],
+            },
+          },
+        },
+      },
+      {
+        $addFields: {
+          chatNotRead: { $anyElementTrue: "$unread" },
+          unreadEarliestMessage: {
+            $cond: [
+              {
+                $and: [
+                  { $ne: ["$senderId", currentUserId] },
+                  {
+                    $not: {
+                      $in: [currentUserId, { $ifNull: ["$readBy", []] }],
+                    },
+                  },
+                ],
+              },
+              true,
+              false,
+            ],
+          },
         },
       },
       {
@@ -125,23 +170,25 @@ const myChatParticipants = asyncHandler(async (req, res) => {
           username: "$userDetails.username",
           email: "$userDetails.email",
           image: "$userDetails.image",
-          lastMessageTime: 1,
-          lastMessageSnippet: {
+          earliestMessageTime: 1,
+          earliestMessageSnippet: {
             $ifNull: [
               {
                 $cond: {
-                  if: { $lte: [{ $strLenCP: "$lastMessage" }, 40] },
-                  then: "$lastMessage",
-                  else: { $substr: ["$lastMessage", 0, 40] },
+                  if: { $lte: [{ $strLenCP: "$earliestMessage" }, 40] },
+                  then: "$earliestMessage",
+                  else: { $substr: ["$earliestMessage", 0, 40] },
                 },
               },
               "No message",
             ],
           },
+          chatNotRead: 1,
+          unreadEarliestMessage: 1,
         },
       },
       {
-        $sort: { lastMessageTime: -1 },
+        $sort: { earliestMessageTime: 1 },
       },
     ]);
 
@@ -151,6 +198,7 @@ const myChatParticipants = asyncHandler(async (req, res) => {
     res.status(500).json({ error: "Failed to fetch chat participants" });
   }
 });
+
 const handleDeleteMessage = asyncHandler(async (req, res) => {
   const { messageId } = req.params;
   console.log("Message ID to delete:", messageId);

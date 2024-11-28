@@ -18,7 +18,10 @@ const messageSchema = new mongoose.Schema(
       default: false,
     },
     timestamp: { type: Date, default: Date.now },
-    readBy: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    readBy: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+      default: [], // Default to an empty array
+    },
   },
   { timestamps: true }
 );
