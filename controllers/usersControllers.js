@@ -27,9 +27,10 @@ const getAllUsers = async (req, res) => {
 
     const friends = [];
     const nonFriends = [];
+
     users.forEach((user) => {
       const isFriend = currentUser.friends.some((friendId) =>
-        mongoose.Types.ObjectId(friendId).equals(user._id)
+        new mongoose.Types.ObjectId(friendId).equals(user._id)
       );
 
       if (isFriend) {
