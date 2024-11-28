@@ -35,7 +35,7 @@ app.use(
 );
 
 // Routes
-app.use("/", require("./routes/routes"));
+app.use("/", require("./Routes/routes"));
 app.get("/", (req, res) => {
   res.status(200).send({
     Message:
