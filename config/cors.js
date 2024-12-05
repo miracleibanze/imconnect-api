@@ -18,6 +18,9 @@ const socketCors = {
     methods: ["GET", "POST"],
     credentials: true,
   },
+  pingInterval: 25000, // Interval between pings
+  pingTimeout: 60000, // Timeout before disconnecting
+  transports: ["websocket"], // Use WebSocket only
 };
 
 module.exports = { corsOptions, socketCors };

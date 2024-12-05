@@ -76,27 +76,49 @@ const getOneUser = async (req, res) => {
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
-
 const createNewUser = asyncHandler(async (req, res) => {
   const { names, username, password, email, dob, gender } = req.body;
 
+  // Check if all required fields are provided
   if (!names || !username || !password || !email || !gender) {
     return res.status(400).json({
-      message: "All fields required !",
+      message: "All fields are required!",
     });
   }
 
-  const duplicate = await User.findOne({ username }).lean().exec();
-
-  if (duplicate) {
-    return res.status(409).json({ message: "Duplicate username" });
-  }
-
-  const userObject = req.body;
-
-  userObject.password = await bcrypt.hash(password, 10);
-
   try {
+    // Check for duplicates in username, email, or names
+    const duplicate = await User.findOne({
+      $or: [{ username }, { email }, { names }],
+    })
+      .lean()
+      .exec();
+
+    if (duplicate) {
+      let duplicateField = "";
+      if (duplicate.username === username) duplicateField = "username";
+      else if (duplicate.email === email) duplicateField = "email";
+      else if (duplicate.names === names) duplicateField = "names";
+
+      return res
+        .status(409)
+        .json({ message: `Duplicate ${duplicateField} found` });
+    }
+
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create the user object
+    const userObject = {
+      names,
+      username,
+      password: hashedPassword,
+      email,
+      dob,
+      gender,
+    };
+
+    // Create the user
     const user = await User.create(userObject);
 
     if (user) {
@@ -105,9 +127,11 @@ const createNewUser = asyncHandler(async (req, res) => {
       return res.status(400).json({ message: "Invalid user data received" });
     }
   } catch (error) {
+    console.error("Error creating user:", error);
     return res.status(500).json({ message: "Server error", error });
   }
 });
+
 const updateUser = asyncHandler(async (req, res) => {
   const {
     id,
@@ -354,7 +378,6 @@ const currentRequests = asyncHandler(async (req, res) => {
     if (!user) {
       return res.status(400).send({ message: "User not found" });
     }
-    console.log(user);
     return res.send(user.friendRequests);
   } catch (error) {
     console.error("Error fetching friend requests:", error);

@@ -2,24 +2,22 @@ const asyncHandler = require("express-async-handler");
 const Message = require("../models/Message");
 const User = require("../models/User");
 const mongoose = require("mongoose");
-const { getIO } = require("../socket");
 
 const createNewMessage = asyncHandler(async (req, res) => {
-  const { senderId, receiverId, message, image } = req.body;
+  const { senderId, receiverId, message, isImage } = req.body; // Added isImage to request body
 
   const newMessage = new Message({
     senderId,
     receiverId,
     message,
-    image,
+    isImage, // Use the isImage flag to set the correct value
   });
 
   try {
+    // Save the new message to the database
     await newMessage.save();
 
-    const io = getIO();
-    io.to(receiverId).emit("newMessage", newMessage);
-
+    // Send the response back to the client with the saved message
     res.status(200).json({ success: true, message: newMessage });
   } catch (error) {
     console.error(error);
@@ -51,6 +49,7 @@ const getAllMessages = asyncHandler(async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
 });
+
 const markAsRead = asyncHandler(async (req, res) => {
   const { senderId, receiverId } = req.body;
 
@@ -78,11 +77,12 @@ const markAsRead = asyncHandler(async (req, res) => {
 const myChatParticipants = asyncHandler(async (req, res) => {
   try {
     const username = req.params.username;
-
     const currentUser = await User.findOne({ username });
+
     if (!currentUser) {
       return res.status(404).json({ error: "User not found" });
     }
+
     const currentUserId = new mongoose.Types.ObjectId(currentUser._id);
 
     const chatParticipants = await Message.aggregate([
@@ -103,24 +103,25 @@ const myChatParticipants = asyncHandler(async (req, res) => {
           message: "$message",
           readBy: "$readBy",
           timestamp: "$timestamp",
+          senderId: 1, // Include senderId for further processing
         },
       },
       {
         $group: {
           _id: "$userId",
-          earliestMessageTime: { $min: "$timestamp" }, // Get the earliest message time
-          earliestMessage: { $last: "$message" }, // Get the earliest message content
+          earliestMessageTime: { $min: "$timestamp" },
+          earliestMessage: { $last: "$message" },
           unread: {
             $push: {
               $cond: [
                 {
                   $and: [
-                    { $ne: ["$senderId", currentUserId] }, // Message sent by the other user
+                    { $ne: ["$senderId", currentUserId] },
                     {
                       $not: {
                         $in: [currentUserId, { $ifNull: ["$readBy", []] }],
                       },
-                    }, // Not read by the current user
+                    },
                   ],
                 },
                 true,
@@ -133,22 +134,6 @@ const myChatParticipants = asyncHandler(async (req, res) => {
       {
         $addFields: {
           chatNotRead: { $anyElementTrue: "$unread" },
-          unreadEarliestMessage: {
-            $cond: [
-              {
-                $and: [
-                  { $ne: ["$senderId", currentUserId] },
-                  {
-                    $not: {
-                      $in: [currentUserId, { $ifNull: ["$readBy", []] }],
-                    },
-                  },
-                ],
-              },
-              true,
-              false,
-            ],
-          },
         },
       },
       {
@@ -184,7 +169,6 @@ const myChatParticipants = asyncHandler(async (req, res) => {
             ],
           },
           chatNotRead: 1,
-          unreadEarliestMessage: 1,
         },
       },
       {
@@ -216,9 +200,6 @@ const handleDeleteMessage = asyncHandler(async (req, res) => {
     console.log("Deleted message:", message);
 
     const messages = await Message.find().lean().exec();
-    const io = getIO();
-
-    io.emit("messageDeleted", { messageId });
 
     res.status(200).json({ message: "Message deleted successfully" });
   } catch (error) {

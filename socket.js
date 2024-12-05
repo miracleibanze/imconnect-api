@@ -1,33 +1,62 @@
-let io; // Variable to store the Socket.io instance
+const socketIO = require("socket.io");
+const { socketCors } = require("./config/cors");
+
+let io = null; // Socket.io instance
+let users = {}; // Map userId to socketId(s)
 
 function initialize(server) {
   if (!io) {
-    const socketIO = require("socket.io");
-    io = socketIO(server, {
-      cors: {
-        origin: "*", // Replace "*" with specific frontend URL in production
-        methods: ["GET", "POST"],
-      },
-    });
-
+    io = socketIO(server, socketCors);
     io.on("connection", (socket) => {
-      console.log(`User connected: ${socket.id}`);
+      const userId = socket.handshake.query.myId;
+      console.log(`Socket connected: ${socket.id}`);
 
-      // Handle joining a room
-      socket.on("joinRoom", (userId) => {
-        socket.join(userId);
-        console.log(`User ${userId} joined room: ${userId}`);
+      if (userId) {
+        if (!users[userId]) {
+          users[userId] = [];
+        }
+        users[userId].push(socket.id);
+        console.log(`User registered: ${userId}, Sockets: ${users[userId]}`);
+      }
+
+      // Print all connected userIds
+      console.log("Current connected users:", Object.keys(users));
+
+      // Handle disconnect
+      socket.on("disconnect", (reason) => {
+        console.log(`Socket disconnected: ${socket.id}, reason: ${reason}`);
+        for (const userId in users) {
+          users[userId] = users[userId].filter((id) => id !== socket.id);
+          if (users[userId].length === 0) {
+            delete users[userId]; // Remove user if no active sockets remain
+          }
+        }
+        console.log("Current connected users:", Object.keys(users));
       });
 
-      // Handle disconnection
-      socket.on("disconnect", () => {
-        console.log(`User disconnected: ${socket.id}`);
+      // Handle sending messages
+      socket.on("sendMessage", (messageData) => {
+        const { senderId, receiverId, message } = messageData;
+        const receiverSocketIds = users[receiverId];
+        if (receiverSocketIds && receiverSocketIds.length > 0) {
+          receiverSocketIds.forEach((socketId) => {
+            io.to(socketId).emit("newMessage", {
+              senderId,
+              receiverId,
+              message,
+            });
+          });
+        } else {
+          console.log(`Receiver ${receiverId} is not connected.`);
+        }
+      });
+
+      socket.onAny((event, ...args) => {
+        console.log(`Event received: ${event}`, args);
       });
     });
 
     console.log("Socket.io initialized successfully.");
-  } else {
-    console.log("Socket.io is already initialized.");
   }
 
   return io;
@@ -35,11 +64,9 @@ function initialize(server) {
 
 function getIO() {
   if (!io) {
-    throw new Error(
-      "Socket.io not initialized! Call initialize(server) first."
-    );
+    throw new Error("Socket.io is not initialized.");
   }
   return io;
 }
 
-module.exports = { initialize, getIO };
+module.exports = { initialize, getIO, users };

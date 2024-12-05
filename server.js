@@ -4,6 +4,7 @@ const cors = require("cors");
 const mongoose = require("mongoose");
 const http = require("http");
 const { initialize } = require("./socket");
+const { corsOptions } = require("./config/cors");
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -11,13 +12,16 @@ const PORT = process.env.PORT || 4000;
 // Create an HTTP server to handle both Express and Socket.io
 const server = http.createServer(app);
 
+const mongoOptions = {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+  connectTimeoutMS: 40000, // 30 seconds for initial connection
+  socketTimeoutMS: 60000, // 60 seconds for socket operations (queries, etc.)
+};
+
 // Connect to MongoDB
 mongoose
-  .connect(process.env.MONGODB_URL, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-    connectTimeoutMS: 30000,
-  })
+  .connect(process.env.MONGODB_URL, mongoOptions)
   .then(() => console.log("MongoDB connected"))
   .catch((err) => {
     console.error("MongoDB connection error:", err);
@@ -27,12 +31,7 @@ mongoose
 // Middleware
 app.use(express.json({ limit: "300mb" }));
 app.use(express.urlencoded({ limit: "300mb", extended: true }));
-app.use(
-  cors({
-    origin: "*", // Replace "*" with your frontend URL in production
-    methods: ["GET", "POST"],
-  })
-);
+app.use(cors(corsOptions));
 
 // Routes
 app.use("/", require("./Routes/routes"));
