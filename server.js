@@ -2,15 +2,10 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const mongoose = require("mongoose");
-const http = require("http");
-const { initialize } = require("./socket");
 const { corsOptions } = require("./config/cors");
 
 const app = express();
 const PORT = process.env.PORT || 4000;
-
-// Create an HTTP server to handle both Express and Socket.io
-const server = http.createServer(app);
 
 const mongoOptions = {
   useNewUrlParser: true,
@@ -42,14 +37,7 @@ app.get("/", (req, res) => {
   });
 });
 
-// Initialize Socket.io
-initialize(server);
-
-// Set keep-alive and headers timeout
-server.keepAliveTimeout = 120000;
-server.headersTimeout = 120000;
-
 // Start the server
-server.listen(PORT, () => {
+app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
