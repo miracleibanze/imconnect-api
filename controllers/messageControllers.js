@@ -73,7 +73,6 @@ const markAsRead = asyncHandler(async (req, res) => {
     res.status(500).json({ error: "Error marking messages as read" });
   }
 });
-
 const myChatParticipants = asyncHandler(async (req, res) => {
   try {
     const username = req.params.username;
@@ -104,6 +103,7 @@ const myChatParticipants = asyncHandler(async (req, res) => {
           readBy: "$readBy",
           timestamp: "$timestamp",
           senderId: 1, // Include senderId for further processing
+          isImage: "$isImage", // Include isImage field for later check
         },
       },
       {
@@ -111,6 +111,7 @@ const myChatParticipants = asyncHandler(async (req, res) => {
           _id: "$userId",
           earliestMessageTime: { $min: "$timestamp" },
           earliestMessage: { $last: "$message" },
+          isImage: { $last: "$isImage" }, // Get the last message's isImage value
           unread: {
             $push: {
               $cond: [
@@ -119,7 +120,7 @@ const myChatParticipants = asyncHandler(async (req, res) => {
                     { $ne: ["$senderId", currentUserId] },
                     {
                       $not: {
-                        $in: [currentUserId, { $ifNull: ["$readBy", []] }],
+                        $in: [currentUserId, { $ifNull: ["$readBy", []] }], // Check unread messages
                       },
                     },
                   ],
@@ -157,16 +158,22 @@ const myChatParticipants = asyncHandler(async (req, res) => {
           image: "$userDetails.image",
           earliestMessageTime: 1,
           earliestMessageSnippet: {
-            $ifNull: [
-              {
-                $cond: {
-                  if: { $lte: [{ $strLenCP: "$earliestMessage" }, 40] },
-                  then: "$earliestMessage",
-                  else: { $substr: ["$earliestMessage", 0, 40] },
-                },
+            $cond: {
+              if: { $eq: ["$isImage", true] }, // Check if the last message is an image
+              then: "Sent you an image", // Return this if it's an image
+              else: {
+                $ifNull: [
+                  {
+                    $cond: {
+                      if: { $lte: [{ $strLenCP: "$earliestMessage" }, 40] },
+                      then: "$earliestMessage", // Show message if it is short enough
+                      else: { $substr: ["$earliestMessage", 0, 40] }, // Truncate message if long
+                    },
+                  },
+                  "No message", // Default fallback if message is empty
+                ],
               },
-              "No message",
-            ],
+            },
           },
           chatNotRead: 1,
         },
