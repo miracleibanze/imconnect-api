@@ -1,17 +1,20 @@
 require("dotenv").config();
+const http = require("http");
 const express = require("express");
 const cors = require("cors");
 const mongoose = require("mongoose");
 const { corsOptions } = require("./config/cors");
+const { initialize } = require("./socket");
 
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+// MongoDB connection options
 const mongoOptions = {
   useNewUrlParser: true,
   useUnifiedTopology: true,
-  connectTimeoutMS: 40000, // 30 seconds for initial connection
-  socketTimeoutMS: 60000, // 60 seconds for socket operations (queries, etc.)
+  connectTimeoutMS: 40000, // 40 seconds for initial connection
+  socketTimeoutMS: 60000, // 60 seconds for socket operations
 };
 
 // Connect to MongoDB
@@ -37,7 +40,11 @@ app.get("/", (req, res) => {
   });
 });
 
+// Create an HTTP server and attach Socket.io
+const server = http.createServer(app);
+initialize(server); // Pass the server instance to initialize Socket.io
+
 // Start the server
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });

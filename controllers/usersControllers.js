@@ -16,6 +16,11 @@ const getAllUsers = async (req, res) => {
       return res.status(404).json({ message: "Current user not found" });
     }
 
+    // Ensure that currentUser.friends is an array, defaulting to an empty array if undefined
+    const friendsList = Array.isArray(currentUser.friends)
+      ? currentUser.friends
+      : [];
+
     const users = await User.find({ username: { $ne: excludedUsername } })
       .select("image names username friends")
       .sort({ createdAt: -1 })
@@ -29,14 +34,27 @@ const getAllUsers = async (req, res) => {
     const nonFriends = [];
 
     users.forEach((user) => {
-      const isFriend = currentUser.friends.some((friendId) =>
+      // Check if the current user is friends with the other user
+      const isFriend = friendsList.some((friendId) =>
         new mongoose.Types.ObjectId(friendId).equals(user._id)
       );
 
+      // Add requestSent flag if the current user has sent a request to this user
+      const requestSent =
+        currentUser.sentRequests &&
+        currentUser.sentRequests.some((request) =>
+          new mongoose.Types.ObjectId(request).equals(user._id)
+        );
+
+      const userWithRequestStatus = {
+        ...user,
+        requestSent, // add the requestSent field
+      };
+
       if (isFriend) {
-        friends.push(user);
+        friends.push(userWithRequestStatus);
       } else {
-        nonFriends.push(user);
+        nonFriends.push(userWithRequestStatus);
       }
     });
 

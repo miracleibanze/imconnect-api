@@ -2,22 +2,32 @@ const asyncHandler = require("express-async-handler");
 const Message = require("../models/Message");
 const User = require("../models/User");
 const mongoose = require("mongoose");
-
+const { getIO, users } = require("../socket");
 const createNewMessage = asyncHandler(async (req, res) => {
-  const { senderId, receiverId, message, isImage } = req.body; // Added isImage to request body
+  const { senderId, receiverId, message, isImage } = req.body;
 
   const newMessage = new Message({
     senderId,
     receiverId,
     message,
-    isImage, // Use the isImage flag to set the correct value
+    isImage,
   });
 
   try {
     // Save the new message to the database
     await newMessage.save();
 
-    // Send the response back to the client with the saved message
+    const io = getIO();
+
+    // Check if the receiver is connected
+    if (users[receiverId]) {
+      // Emit the message to the receiver's socketId(s)
+      users[receiverId].forEach((socketId) => {
+        io.to(socketId).emit("newMessage", newMessage);
+      });
+    }
+
+    // Send the response back to the sender
     res.status(200).json({ success: true, message: newMessage });
   } catch (error) {
     console.error(error);
@@ -99,28 +109,25 @@ const myChatParticipants = asyncHandler(async (req, res) => {
               else: "$senderId",
             },
           },
-          message: "$message",
-          readBy: "$readBy",
-          timestamp: "$timestamp",
-          senderId: 1, // Include senderId for further processing
-          isImage: "$isImage", // Include isImage field for later check
+          fullMessage: "$$ROOT", // Save the entire message object for later use
         },
       },
       {
         $group: {
           _id: "$userId",
-          earliestMessageTime: { $min: "$timestamp" },
-          earliestMessage: { $last: "$message" },
-          isImage: { $last: "$isImage" }, // Get the last message's isImage value
+          earliestMessageObject: { $last: "$fullMessage" }, // Store the entire message object for the earliest message
           unread: {
             $push: {
               $cond: [
                 {
                   $and: [
-                    { $ne: ["$senderId", currentUserId] },
+                    { $ne: ["$fullMessage.senderId", currentUserId] },
                     {
                       $not: {
-                        $in: [currentUserId, { $ifNull: ["$readBy", []] }], // Check unread messages
+                        $in: [
+                          currentUserId,
+                          { $ifNull: ["$fullMessage.readBy", []] }, // Check unread messages
+                        ],
                       },
                     },
                   ],
@@ -156,30 +163,12 @@ const myChatParticipants = asyncHandler(async (req, res) => {
           username: "$userDetails.username",
           email: "$userDetails.email",
           image: "$userDetails.image",
-          earliestMessageTime: 1,
-          earliestMessageSnippet: {
-            $cond: {
-              if: { $eq: ["$isImage", true] }, // Check if the last message is an image
-              then: "Sent you an image", // Return this if it's an image
-              else: {
-                $ifNull: [
-                  {
-                    $cond: {
-                      if: { $lte: [{ $strLenCP: "$earliestMessage" }, 40] },
-                      then: "$earliestMessage", // Show message if it is short enough
-                      else: { $substr: ["$earliestMessage", 0, 40] }, // Truncate message if long
-                    },
-                  },
-                  "No message", // Default fallback if message is empty
-                ],
-              },
-            },
-          },
+          earliestMessage: "$earliestMessageObject", // Include full message object
           chatNotRead: 1,
         },
       },
       {
-        $sort: { earliestMessageTime: 1 },
+        $sort: { "earliestMessage.timestamp": -1 },
       },
     ]);
 
