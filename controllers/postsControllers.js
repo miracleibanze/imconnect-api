@@ -67,32 +67,46 @@ const getPostsByUserId = asyncHandler(async (req, res) => {
     res.status(200).json({ success: true, posts: transformedPosts });
   } catch (error) {
     console.error("Error fetching posts:", error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "An error occurred while fetching posts.",
-      });
+    res.status(500).json({
+      success: false,
+      message: "An error occurred while fetching posts.",
+    });
   }
 });
-
 const createNewPost = asyncHandler(async (req, res) => {
-  const { user, description } = req.body;
+  const { user, description, images, feeling } = req.body;
 
+  // Validate required fields
   if (!user || !description) {
     return res
       .status(400)
       .json({ message: "User and description are required." });
   }
 
-  const userExists = await User.findById(user).lean();
-  if (!userExists) {
-    return res.status(404).json({ message: "User not found." });
+  try {
+    // Check if user exists
+    const userExists = await User.findById(user).lean();
+    if (!userExists) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    // Create a new post
+    const post = await Post.create({
+      user,
+      description,
+      images: images || [], // Default to empty array if not provided
+      feeling: feeling || "", // Default to empty string if not provided
+    });
+
+    // Return the newly created post
+    res.status(201).json({ message: "Post created successfully.", post });
+  } catch (error) {
+    // Catch and return any server error
+    console.error("Error creating post:", error.message);
+    res
+      .status(500)
+      .json({ message: "An error occurred while creating the post." });
   }
-
-  const post = await Post.create({ user, description });
-
-  res.status(201).json({ message: "Post created successfully.", post });
 });
 
 const updatePost = asyncHandler(async (req, res) => {

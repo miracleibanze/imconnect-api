@@ -5,69 +5,66 @@ const Post = require("../models/Post");
 const Message = require("../models/Message");
 
 const mongoose = require("mongoose");
-
 const getAllUsers = async (req, res) => {
   try {
     const excludedUsername = req.params.username;
 
     // Find the current user
     const currentUser = await User.findOne({ username: excludedUsername })
-      .select("friends sentRequests")
+      .select("_id friends sentRequests friendRequests")
       .lean();
 
     if (!currentUser) {
       return res.status(404).json({ message: "Current user not found" });
     }
 
-    const { friends = [], sentRequests = [] } = currentUser;
+    const {
+      _id: currentUserId,
+      friends = [],
+      sentRequests = [],
+      friendRequests = [],
+    } = currentUser;
 
     // Fetch all users except the current user
-    const users = await User.find({ username: { $ne: excludedUsername } })
-      .select("image names username friends sentRequests friendRequests") // Also selecting friendRequests field
+    const allUsers = await User.find({ username: { $ne: excludedUsername } })
+      .select("image names username friends sentRequests friendRequests")
       .sort({ createdAt: -1 })
       .lean();
 
-    if (!users.length) {
+    if (!allUsers.length) {
       return res.json({ message: "No users found" });
     }
 
-    // Categorize friends and non-friends
+    // Create sets for efficient lookups
     const friendsSet = new Set(friends.map((id) => id.toString()));
     const sentRequestsSet = new Set(sentRequests.map((id) => id.toString()));
+    const friendRequestsSet = new Set(
+      friendRequests.map((id) => id.toString())
+    );
 
+    // Categorize users
     const friendsList = [];
     const nonFriendsList = [];
+    const friendRequestsList = [];
 
-    users.forEach((user) => {
-      const isFriend = friendsSet.has(user._id.toString());
-      let requestSent = sentRequestsSet.has(user._id.toString());
+    allUsers.forEach((user) => {
+      const userIdStr = user._id.toString();
 
-      // Check if the current user has sent a request to this user
-      if (!isFriend) {
-        // If the current user's ID is in the friend's friendRequests, mark the user as requestSent
-        const hasRequestPending = user.friendRequests?.some((requestId) =>
-          new mongoose.Types.ObjectId(requestId).equals(currentUser._id)
-        );
-
-        if (hasRequestPending) {
-          requestSent = true;
-        }
-      }
-
-      const userWithRequestStatus = {
-        ...user,
-        requestSent, // This indicates if the current user has sent a request to this user or if the user has a pending request from the current user
-      };
-
-      if (isFriend) {
-        friendsList.push(userWithRequestStatus);
+      // Categorize based on relationships
+      if (friendsSet.has(userIdStr)) {
+        friendsList.push(user);
+      } else if (friendRequestsSet.has(userIdStr)) {
+        friendRequestsList.push(user);
       } else {
-        nonFriendsList.push(userWithRequestStatus);
+        const requestSent = sentRequestsSet.has(userIdStr);
+        nonFriendsList.push({ ...user, requestSent });
       }
     });
 
+    // Return categorized lists
     res.json({
       friends: friendsList,
+      friendRequests: friendRequestsList,
       nonFriends: nonFriendsList,
     });
   } catch (error) {
@@ -275,82 +272,28 @@ const deleteUser = asyncHandler(async (req, res) => {
   res.json(reply);
 });
 
-const getMyFiends = asyncHandler(async (req, res) => {
+const getMyFriends = asyncHandler(async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const currentUser = await User.findById(userId);
+    // Find the current user
+    const currentUser = await User.findById(userId).select("friends");
     if (!currentUser) {
-      return res.status(404).json({ error: "User not found" });
+      return res.status(404).json({ message: "User not found" });
     }
-    const currentUserId = new mongoose.Types.ObjectId(currentUser._id);
 
-    const chatParticipants = await Message.aggregate([
-      {
-        $match: {
-          $or: [{ senderId: currentUser._id }, { receiverId: currentUser._id }],
-        },
-      },
-      {
-        $project: {
-          userId: {
-            $cond: {
-              if: { $eq: ["$senderId", currentUserId] },
-              then: "$receiverId",
-              else: "$senderId",
-            },
-          },
-          message: "$message",
-          readBy: "$readBy",
-          timestamp: "$timestamp",
-        },
-      },
-      {
-        $group: {
-          _id: "$userId",
-          lastMessageTime: { $max: "$timestamp" },
-          lastMessage: { $first: "$message" },
-        },
-      },
-      {
-        $lookup: {
-          from: "users",
-          localField: "_id",
-          foreignField: "_id",
-          as: "userDetails",
-        },
-      },
-      {
-        $unwind: "$userDetails",
-      },
-      {
-        $project: {
-          _id: 0,
-          userId: "$_id",
-          names: "$userDetails.names",
-          username: "$userDetails.username",
-          email: "$userDetails.email",
-          image: "$userDetails.image",
-          lastMessageTime: 1,
-        },
-      },
-      {
-        $sort: { names: 1 },
-      },
-    ]);
+    // Retrieve users whose IDs are in the `friends` array
+    const friends = await User.find({ _id: { $in: currentUser.friends } })
+      .select("names username email image")
+      .sort({ names: 1 });
 
-    let friendsIds = [];
-    chatParticipants.map(async (friend, index) => {
-      friendsIds = [...friendsIds, friend.userId];
-      currentUser.friends = friendsIds;
-    });
-    await currentUser.save();
-    res.send(chatParticipants);
+    res.status(200).json(friends);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Failed to fetch chat participants" });
+    console.error("Error fetching friends:", error);
+    res.status(500).json({ message: "Failed to fetch friends", error });
   }
 });
+
 const sendRequest = asyncHandler(async (req, res) => {
   const { recipientId } = req.params; // recipient ID from URL
   const { senderId } = req.body; // sender ID from the request body
@@ -411,48 +354,64 @@ const currentRequests = asyncHandler(async (req, res) => {
     return res.status(400).send({ message: "Error fetching requests" });
   }
 });
-
 const requestRespond = asyncHandler(async (req, res) => {
   const { senderId } = req.params;
   const { recipientId, action } = req.body;
 
   try {
+    // Fetch both users
     const recipient = await User.findById(recipientId);
     const sender = await User.findById(senderId);
 
+    // Validate users
     if (!recipient || !sender) {
       return res.status(404).json({ message: "User not found" });
     }
 
+    // Check if the friend request exists
     const requestIndex = recipient.friendRequests.indexOf(senderId);
     if (requestIndex === -1) {
       return res.status(400).json({ message: "No friend request found" });
     }
 
+    // Handle the action
     if (action === "accept") {
-      recipient.friends.push(senderId);
-      sender.friends.push(recipientId);
+      // Add each user to the other's friend list
+      if (!recipient.friends.includes(senderId)) {
+        recipient.friends.push(senderId);
+      }
+      if (!sender.friends.includes(recipientId)) {
+        sender.friends.push(recipientId);
+      }
+    } else if (action === "decline") {
+      // If declining, just remove the friend request
+      recipient.friendRequests.splice(requestIndex, 1);
+    } else {
+      return res.status(400).json({ message: "Invalid action" });
     }
 
+    // Remove the friend request for the recipient
     recipient.friendRequests.splice(requestIndex, 1);
+
+    // Save updates to both users
     await recipient.save();
     await sender.save();
 
     res
       .status(200)
-      .json({ message: `Friend request ${action}ed successfully` });
+      .json({ message: `Friend request ${action}ed successfully.` });
   } catch (error) {
+    console.error("Error responding to friend request:", error);
     res.status(500).json({ message: "Server error", error });
   }
 });
-
 module.exports = {
   getAllUsers,
   createNewUser,
   updateUser,
   deleteUser,
   getOneUser,
-  getMyFiends,
+  getMyFriends,
   requestRespond,
   sendRequest,
   currentRequests,

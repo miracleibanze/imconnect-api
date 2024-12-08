@@ -4,7 +4,7 @@ const {
   updateUser,
   deleteUser,
   getOneUser,
-  getMyFiends,
+  getMyFriends,
   requestRespond,
   sendRequest,
   currentRequests,
@@ -18,7 +18,7 @@ users.delete("/users", deleteUser);
 
 users.get("/users/:username", getAllUsers);
 users.get("/users/one/:username", getOneUser);
-users.get("/users/friends/:userId", getMyFiends);
+users.get("/users/friends/:userId", getMyFriends);
 
 users.post("/users/send-friend-request/:recipientId", sendRequest);
 

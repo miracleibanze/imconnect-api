@@ -14,7 +14,7 @@ authRouter.post(
 
     const findUser = await User.findOne({ email }).lean().exec();
     if (!findUser) {
-      return res.status(404).send({ message: "user" });
+      return res.status(404).send({ message: "email" });
     }
     const isMatch = await bcrypt.compare(password, findUser.password);
     if (!isMatch) {
