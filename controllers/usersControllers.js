@@ -3,67 +3,75 @@ const bcrypt = require("bcrypt");
 const User = require("../models/User");
 const Post = require("../models/Post");
 const Message = require("../models/Message");
-const { default: mongoose } = require("mongoose");
+
+const mongoose = require("mongoose");
 
 const getAllUsers = async (req, res) => {
   try {
     const excludedUsername = req.params.username;
-    const currentUser = await User.findOne({
-      username: excludedUsername,
-    }).lean();
+
+    // Find the current user
+    const currentUser = await User.findOne({ username: excludedUsername })
+      .select("friends sentRequests")
+      .lean();
 
     if (!currentUser) {
       return res.status(404).json({ message: "Current user not found" });
     }
 
-    // Ensure that currentUser.friends is an array, defaulting to an empty array if undefined
-    const friendsList = Array.isArray(currentUser.friends)
-      ? currentUser.friends
-      : [];
+    const { friends = [], sentRequests = [] } = currentUser;
 
+    // Fetch all users except the current user
     const users = await User.find({ username: { $ne: excludedUsername } })
-      .select("image names username friends")
+      .select("image names username friends sentRequests friendRequests") // Also selecting friendRequests field
       .sort({ createdAt: -1 })
       .lean();
 
-    if (!users || !users.length) {
+    if (!users.length) {
       return res.json({ message: "No users found" });
     }
 
-    const friends = [];
-    const nonFriends = [];
+    // Categorize friends and non-friends
+    const friendsSet = new Set(friends.map((id) => id.toString()));
+    const sentRequestsSet = new Set(sentRequests.map((id) => id.toString()));
+
+    const friendsList = [];
+    const nonFriendsList = [];
 
     users.forEach((user) => {
-      // Check if the current user is friends with the other user
-      const isFriend = friendsList.some((friendId) =>
-        new mongoose.Types.ObjectId(friendId).equals(user._id)
-      );
+      const isFriend = friendsSet.has(user._id.toString());
+      let requestSent = sentRequestsSet.has(user._id.toString());
 
-      // Add requestSent flag if the current user has sent a request to this user
-      const requestSent =
-        currentUser.sentRequests &&
-        currentUser.sentRequests.some((request) =>
-          new mongoose.Types.ObjectId(request).equals(user._id)
+      // Check if the current user has sent a request to this user
+      if (!isFriend) {
+        // If the current user's ID is in the friend's friendRequests, mark the user as requestSent
+        const hasRequestPending = user.friendRequests?.some((requestId) =>
+          new mongoose.Types.ObjectId(requestId).equals(currentUser._id)
         );
+
+        if (hasRequestPending) {
+          requestSent = true;
+        }
+      }
 
       const userWithRequestStatus = {
         ...user,
-        requestSent, // add the requestSent field
+        requestSent, // This indicates if the current user has sent a request to this user or if the user has a pending request from the current user
       };
 
       if (isFriend) {
-        friends.push(userWithRequestStatus);
+        friendsList.push(userWithRequestStatus);
       } else {
-        nonFriends.push(userWithRequestStatus);
+        nonFriendsList.push(userWithRequestStatus);
       }
     });
 
     res.json({
-      friends,
-      nonFriends,
+      friends: friendsList,
+      nonFriends: nonFriendsList,
     });
   } catch (error) {
-    console.error("Error fetching all users:", error);
+    console.error("Error fetching all users:", error.message);
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
