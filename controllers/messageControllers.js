@@ -37,26 +37,27 @@ const createNewMessage = asyncHandler(async (req, res) => {
 
 const getAllMessages = asyncHandler(async (req, res) => {
   const { userId, otherUserId } = req.params;
+  if (otherUserId) {
+    try {
+      const messages = await Message.find({
+        $or: [
+          { senderId: userId, receiverId: otherUserId },
+          { senderId: otherUserId, receiverId: userId },
+        ],
+      })
+        .sort({ timestamp: -1 })
+        .lean()
+        .exec();
 
-  try {
-    const messages = await Message.find({
-      $or: [
-        { senderId: userId, receiverId: otherUserId },
-        { senderId: otherUserId, receiverId: userId },
-      ],
-    })
-      .sort({ timestamp: -1 })
-      .lean()
-      .exec();
-
-    const user = await User.findById(otherUserId)
-      .select("image names username email")
-      .lean()
-      .exec();
-    return res.status(200).send({ messages, user });
-  } catch (error) {
-    console.log(error);
-    return res.status(500).json({ error: error.message });
+      const user = await User.findById(otherUserId)
+        .select("image names username email")
+        .lean()
+        .exec();
+      return res.status(200).send({ messages, user });
+    } catch (error) {
+      console.log(error);
+      return res.status(500).json({ error: error.message });
+    }
   }
 });
 

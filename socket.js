@@ -38,7 +38,7 @@ function initialize(server) {
 
     // Handle user disconnection
     socket.on("disconnect", () => {
-      console.log(`Socket disconnected: ${socket.id}`);
+      // console.log(`Socket disconnected: ${socket.id}`);
       Object.keys(users).forEach((userId) => {
         users[userId] = users[userId].filter((id) => id !== socket.id);
 
