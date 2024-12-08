@@ -95,7 +95,7 @@ const getOneUser = async (req, res) => {
   }
 };
 const createNewUser = asyncHandler(async (req, res) => {
-  const { names, username, password, email, dob, gender } = req.body;
+  const { names, username, password, email, dob, gender, image } = req.body;
 
   // Check if all required fields are provided
   if (!names || !username || !password || !email || !gender) {
@@ -134,6 +134,7 @@ const createNewUser = asyncHandler(async (req, res) => {
       email,
       dob,
       gender,
+      image,
     };
 
     // Create the user
