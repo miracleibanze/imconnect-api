@@ -1,7 +1,7 @@
 const corsOptions = {
   origin: [
     "https://imconnect.netlify.app",
-    "http://localhost:5173",
+    "https://imconnect.vercel.app",
     "http://localhost:5174",
   ],
   credentials: true,
@@ -12,7 +12,7 @@ const socketCors = {
   cors: {
     origin: [
       "https://imconnect.netlify.app",
-      "http://localhost:5173",
+      "https://imconnect.vercel.app",
       "http://localhost:5174",
     ],
     methods: ["GET", "POST"],
