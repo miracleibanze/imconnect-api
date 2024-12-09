@@ -168,9 +168,7 @@ const handleLike = asyncHandler(async (req, res) => {
   post.likedBy.push(userId);
   await post.save();
 
-  res
-    .status(200)
-    .json({ message: "Post liked successfully.", likes: post.likes });
+  res.status(200).json({ message: "ok", likes: post.likes });
 });
 
 module.exports = {
