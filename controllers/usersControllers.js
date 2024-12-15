@@ -21,13 +21,12 @@ const getAllUsers = async (req, res) => {
     const {
       _id: currentUserId,
       friends = [],
-      sentRequests = [],
       friendRequests = [],
     } = currentUser;
 
     // Fetch all users except the current user
     const allUsers = await User.find({ username: { $ne: excludedUsername } })
-      .select("image names username friends sentRequests friendRequests")
+      .select("image names username sentRequests friendRequests")
       .sort({ createdAt: -1 })
       .lean();
 
@@ -37,7 +36,6 @@ const getAllUsers = async (req, res) => {
 
     // Create sets for efficient lookups
     const friendsSet = new Set(friends.map((id) => id.toString()));
-    const sentRequestsSet = new Set(sentRequests.map((id) => id.toString()));
     const friendRequestsSet = new Set(
       friendRequests.map((id) => id.toString())
     );
@@ -50,14 +48,12 @@ const getAllUsers = async (req, res) => {
     allUsers.forEach((user) => {
       const userIdStr = user._id.toString();
 
-      // Categorize based on relationships
       if (friendsSet.has(userIdStr)) {
         friendsList.push(user);
       } else if (friendRequestsSet.has(userIdStr)) {
         friendRequestsList.push(user);
       } else {
-        const requestSent = sentRequestsSet.has(userIdStr);
-        nonFriendsList.push({ ...user, requestSent });
+        nonFriendsList.push(user);
       }
     });
 
