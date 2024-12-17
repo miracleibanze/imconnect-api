@@ -2,6 +2,7 @@ const corsOptions = {
   origin: [
     "https://imconnect.netlify.app",
     "https://imconnect.vercel.app",
+    "https://ibanze-miracle.vercel.app",
     "http://localhost:5173",
   ],
   credentials: true,
